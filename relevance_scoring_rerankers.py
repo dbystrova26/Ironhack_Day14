@@ -14,16 +14,7 @@ from sentence_transformers import CrossEncoder
 
 
 def load_environment() -> None:
-    """Load environment variables and validate required configuration.
-
-    Inputs:
-        None.
-    Outputs:
-        None.
-    What it does:
-        Loads values from the local environment file and prepares API keys or
-        configuration needed by the lab.
-    """
+    """Load environment variables and validate required configuration."""
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
 
@@ -34,22 +25,13 @@ def load_environment() -> None:
 
 
 def download_pdf(url: str, output_path: str) -> str:
-    """Download a PDF from a URL to a local path.
-
-    Inputs:
-        url: The remote PDF URL to download.
-        output_path: The local file path where the PDF should be saved.
-    Outputs:
-        The local path to the downloaded PDF as a string.
-    What it does:
-        Retrieves a PDF from the given URL and stores it at the requested path.
-    """
+    """Download a PDF from a URL to a local path."""
     if os.path.exists(output_path):
         size_kb = os.path.getsize(output_path) / 1024
         print(f"Skipping download, file already exists: {output_path} ({size_kb:.1f} KB)")
         return output_path
 
-    response = requests.get(url, timeout=60)
+    response = requests.get(url, timeout=60, headers={"User-Agent": "Mozilla/5.0"})
     if response.status_code != 200:
         raise Exception(f"Failed to download PDF from {url}. HTTP status: {response.status_code}")
 
@@ -62,46 +44,27 @@ def download_pdf(url: str, output_path: str) -> str:
 
 
 def download_documents() -> dict[str, str]:
-    """Collect all local lab source documents.
-
-    Inputs:
-        None.
-    Outputs:
-        A dictionary mapping source names to local document file paths.
-    What it does:
-        Validates that the local Trustworthy AI audio and PDF files exist.
-    """
+    """Download lab source PDFs and return {source_name: local_path}."""
     documents = {
-        "trustworthy_ai_blueprint_audio": {
-            "path": "The_Blueprint_For_Trustworthy_AI.m4a",
-        },
-        "trustworthy_ai_guidelines": {
-            "path": "ethics_guidelines_for_trustworthy_ai-fr_87FE7A3C-D03D-9305-81A653DDA84B5A60_60427.pdf",
-        },
+        "eu_ai_act": (
+            "eu_ai_act.pdf",
+            "https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=OJ:L_202401689",
+        ),
+        "anthropic": (
+            "anthropic_model_card.pdf",
+            "https://www-cdn.anthropic.com/de8ba9b01c9ab7cbabf5c33b80b7bbc618857627/Model_Card_Claude_3.pdf",
+        ),
     }
 
     document_paths = {}
-    for source, details in documents.items():
-        path = details["path"]
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"Local document is missing: {path}")
-        document_paths[source] = path
+    for source, (filename, url) in documents.items():
+        document_paths[source] = download_pdf(url, filename)
 
     return document_paths
 
 
 def load_pdf_pages(pdf_path: str, source: str, topic: str) -> list[Document]:
-    """Load PDF pages as LangChain documents with metadata.
-
-    Inputs:
-        pdf_path: The local path to a PDF file.
-        source: The source label to store in document metadata.
-        topic: The topic label to store in document metadata.
-    Outputs:
-        A list of LangChain Document objects, one per loaded PDF page.
-    What it does:
-        Extracts page text from a PDF and attaches source, topic, and page metadata.
-    """
+    """Load PDF pages as LangChain documents with metadata."""
     loader = PyPDFLoader(pdf_path)
     pages = loader.load()
 
@@ -114,15 +77,7 @@ def load_pdf_pages(pdf_path: str, source: str, topic: str) -> list[Document]:
 
 
 def chunk_documents(documents: list[Document]) -> list[Document]:
-    """Split loaded documents into smaller chunks.
-
-    Inputs:
-        documents: The page-level LangChain documents to split.
-    Outputs:
-        A list of chunk-level LangChain Document objects.
-    What it does:
-        Splits document text into retrievable chunks while preserving metadata.
-    """
+    """Split loaded documents into smaller chunks."""
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=800,
         chunk_overlap=100,
@@ -140,16 +95,7 @@ def chunk_documents(documents: list[Document]) -> list[Document]:
 
 
 def build_vector_store(chunks: list[Document], persist_directory: str) -> Chroma:
-    """Embed chunks and store them in Chroma.
-
-    Inputs:
-        chunks: The chunk-level documents to embed.
-        persist_directory: The directory where the Chroma store should persist.
-    Outputs:
-        A Chroma vector store containing the embedded chunks.
-    What it does:
-        Creates embeddings for document chunks and saves them in a Chroma collection.
-    """
+    """Embed chunks and store them in Chroma."""
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     vector_store = Chroma.from_documents(
         documents=chunks,
@@ -168,18 +114,7 @@ def get_baseline_retrieval(
     k: int = 8,
     source_filter: str | None = None,
 ) -> list[Document]:
-    """Retrieve relevant chunks using baseline cosine similarity.
-
-    Inputs:
-        vector_store: The Chroma vector store to search.
-        query: The user question or search query.
-        k: The number of chunks to retrieve.
-        source_filter: An optional source metadata value to restrict retrieval.
-    Outputs:
-        A list of retrieved LangChain Document objects.
-    What it does:
-        Runs similarity search against Chroma, optionally limited by source metadata.
-    """
+    """Retrieve relevant chunks using baseline cosine similarity."""
     if source_filter is None:
         chunks = vector_store.similarity_search(query, k=k)
         source_message = "all sources"
@@ -195,16 +130,7 @@ def get_baseline_retrieval(
 
 
 def score_chunk_relevance(query: str, chunk: Document) -> float:
-    """Score one chunk's relevance to a query using an LLM.
-
-    Inputs:
-        query: The user question or search query.
-        chunk: The document chunk to score.
-    Outputs:
-        A float relevance score from 0.0 to 1.0.
-    What it does:
-        Asks a language model to rate how relevant a chunk is to the query.
-    """
+    """Score one chunk's relevance to a query using an LLM."""
     llm = ChatAnthropic(model="claude-haiku-4-5", temperature=0)
     prompt = f"""
 Return ONLY a float from 0.0 to 1.0.
@@ -228,16 +154,7 @@ Chunk:
 
 
 def llm_rerank_chunks(query: str, chunks: list[Document]) -> list[tuple[Document, float]]:
-    """Rerank chunks using LLM relevance scores.
-
-    Inputs:
-        query: The user question or search query.
-        chunks: The retrieved chunks to score and rerank.
-    Outputs:
-        A list of document and score tuples sorted by relevance.
-    What it does:
-        Scores each chunk with an LLM and orders the chunks by score.
-    """
+    """Rerank chunks using LLM relevance scores."""
     results = []
     for chunk in chunks:
         score = score_chunk_relevance(query, chunk)
@@ -251,15 +168,7 @@ def llm_rerank_chunks(query: str, chunks: list[Document]) -> list[tuple[Document
 def load_cross_encoder(
     model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2",
 ) -> CrossEncoder:
-    """Load a local cross-encoder reranking model.
-
-    Inputs:
-        model_name: The sentence-transformers cross-encoder model identifier.
-    Outputs:
-        A loaded CrossEncoder model.
-    What it does:
-        Initializes the local reranker used to score query and chunk pairs.
-    """
+    """Load a local cross-encoder reranking model."""
     reranker = CrossEncoder(model_name)
     print(f"Loaded cross-encoder model: {model_name}")
     return reranker
@@ -270,17 +179,7 @@ def cross_encoder_rerank_chunks(
     chunks: list[Document],
     reranker: CrossEncoder,
 ) -> list[tuple[Document, float]]:
-    """Rerank chunks using a local cross-encoder model.
-
-    Inputs:
-        query: The user question or search query.
-        chunks: The retrieved chunks to rerank.
-        reranker: The loaded CrossEncoder model.
-    Outputs:
-        A list of document and score tuples sorted by relevance.
-    What it does:
-        Scores query and chunk pairs locally and orders chunks by score.
-    """
+    """Rerank chunks using a local cross-encoder model."""
     pairs = [(query, chunk.page_content) for chunk in chunks]
     scores = reranker.predict(pairs)
     results = list(zip(chunks, [float(score) for score in scores]))
@@ -289,16 +188,7 @@ def cross_encoder_rerank_chunks(
 
 
 def generate_answer(query: str, chunks: list[Document]) -> str:
-    """Generate a RAG answer from selected context chunks.
-
-    Inputs:
-        query: The user question.
-        chunks: The context chunks to use for answer generation.
-    Outputs:
-        A generated answer string.
-    What it does:
-        Uses the provided chunks as context to answer the query.
-    """
+    """Generate a RAG answer from selected context chunks."""
     llm = ChatAnthropic(model="claude-haiku-4-5", temperature=0)
     context_parts = []
 
@@ -335,18 +225,7 @@ def run_rag_pipeline(
     method: str,
     source_filter: str | None = None,
 ) -> dict:
-    """Run the retrieval and answer-generation pipeline.
-
-    Inputs:
-        query: The user question.
-        vector_store: The Chroma vector store to search.
-        method: The retrieval or reranking method to use.
-        source_filter: An optional source metadata value to restrict retrieval.
-    Outputs:
-        A dictionary containing the answer, retrieved chunks, and method details.
-    What it does:
-        Combines baseline retrieval, optional reranking, and answer generation.
-    """
+    """Run the retrieval and answer-generation pipeline."""
     initial_chunks = get_baseline_retrieval(
         vector_store,
         query,
@@ -387,16 +266,7 @@ def run_rag_pipeline(
 
 
 def evaluate_queries(vector_store: Chroma, queries: list[str]) -> list[dict]:
-    """Evaluate multiple queries across retrieval methods.
-
-    Inputs:
-        vector_store: The Chroma vector store to search.
-        queries: The list of evaluation questions to run.
-    Outputs:
-        A list of dictionaries containing comparison results.
-    What it does:
-        Runs the lab evaluation queries and compares answers with and without reranking.
-    """
+    """Evaluate multiple queries across retrieval methods."""
     methods = ["baseline", "llm_rerank", "cross_encoder"]
     results = []
 
@@ -409,16 +279,7 @@ def evaluate_queries(vector_store: Chroma, queries: list[str]) -> list[dict]:
 
 
 def write_lab_summary(results: list[dict], output_path: str) -> None:
-    """Write the lab evaluation summary to a Markdown file.
-
-    Inputs:
-        results: The evaluation results to summarize.
-        output_path: The Markdown file path to write.
-    Outputs:
-        None.
-    What it does:
-        Creates a readable lab summary comparing retrieval and reranking behavior.
-    """
+    """Write the lab evaluation summary to a Markdown file."""
     grouped_results = {}
     for result in results:
         grouped_results.setdefault(result["query"], []).append(result)
@@ -458,33 +319,60 @@ Use the cross-encoder reranker when you want a fast local reranking step after r
     print(f"Wrote lab summary to {output_path}")
 
 
-def main() -> None:
-    """Run the relevance scoring and reranker lab script.
+def print_results(results: list[dict]) -> None:
+    """Print all query results grouped by query for easy comparison."""
+    # Group results by query
+    grouped = {}
+    for r in results:
+        grouped.setdefault(r["query"], {})[r["method"]] = r
 
-    Inputs:
-        None.
-    Outputs:
-        None.
-    What it does:
-        Coordinates document preparation, retrieval, reranking, evaluation, and summary output.
-    """
+    for query, methods in grouped.items():
+        print(f"\n{'='*60}")
+        print(f"QUERY: {query}")
+        print(f"{'='*60}")
+
+        for method in ["baseline", "llm_rerank", "cross_encoder"]:
+            if method not in methods:
+                continue
+            r = methods[method]
+            sources_str = ", ".join(
+                f"{s['source']} p{s['page']}" for s in r["sources"]
+            )
+            print(f"\n  [{method.upper()}]")
+            print(f"  Sources: {sources_str}")
+            print(f"  Answer:  {r['answer'][:300]}...")
+
+
+def main() -> None:
+    """Run the relevance scoring and reranker lab script."""
     load_environment()
+
+    # ── Step 1: install requests if missing ──────────────────────
+    # requests is a standard package but may be missing in some envs
+    try:
+        import requests as _r  # noqa: F401
+    except ImportError:
+        import subprocess
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "-q"])
+
     pdf_paths = download_documents()
+
     topics = {
-        "trustworthy_ai_blueprint_audio": "trustworthy_ai",
-        "trustworthy_ai_guidelines": "trustworthy_ai",
+        "eu_ai_act": "ai_regulation",
+        "anthropic":  "ai_safety",
     }
 
     all_pages = []
     for source, path in pdf_paths.items():
         if not path.lower().endswith(".pdf"):
-            print(f"Skipping non-PDF document for PDF loading: {path}")
+            print(f"Skipping non-PDF: {path}")
             continue
         pages = load_pdf_pages(path, source=source, topic=topics[source])
         all_pages.extend(pages)
 
     chunks = chunk_documents(all_pages)
     vector_store = build_vector_store(chunks, persist_directory="./chroma_db")
+
     queries = [
         "What AI systems are prohibited under the EU AI Act?",
         "How does Anthropic test for harmful outputs?",
@@ -492,9 +380,14 @@ def main() -> None:
         "What is the definition of a high-risk AI system?",
         "How should AI systems handle bias?",
     ]
+
     results = evaluate_queries(vector_store, queries=queries)
+
+    # ── Print all answers to terminal ────────────────────────────
+    print_results(results)
+
     write_lab_summary(results, "lab_summary.md")
-    print("Lab complete.")
+    print("\nLab complete.")
 
 
 if __name__ == "__main__":
