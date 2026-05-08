@@ -7,7 +7,8 @@ from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_anthropic import ChatAnthropic
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import CrossEncoder
 
@@ -27,8 +28,8 @@ def load_environment() -> None:
         sys.stdout.reconfigure(encoding="utf-8")
 
     load_dotenv()
-    if "OPENAI_API_KEY" not in os.environ:
-        raise ValueError("OPENAI_API_KEY is missing. Add it to your .env file.")
+    if "ANTHROPIC_API_KEY" not in os.environ:
+        raise ValueError("ANTHROPIC_API_KEY is missing. Add it to your .env file.")
     print("✓ Environment loaded")
 
 
@@ -149,7 +150,7 @@ def build_vector_store(chunks: list[Document], persist_directory: str) -> Chroma
     What it does:
         Creates embeddings for document chunks and saves them in a Chroma collection.
     """
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     vector_store = Chroma.from_documents(
         documents=chunks,
         embedding=embeddings,
@@ -204,7 +205,7 @@ def score_chunk_relevance(query: str, chunk: Document) -> float:
     What it does:
         Asks a language model to rate how relevant a chunk is to the query.
     """
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    llm = ChatAnthropic(model="claude-haiku-4-5", temperature=0)
     prompt = f"""
 Return ONLY a float from 0.0 to 1.0.
 
@@ -298,7 +299,7 @@ def generate_answer(query: str, chunks: list[Document]) -> str:
     What it does:
         Uses the provided chunks as context to answer the query.
     """
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    llm = ChatAnthropic(model="claude-haiku-4-5", temperature=0)
     context_parts = []
 
     for chunk in chunks:
@@ -401,7 +402,7 @@ def evaluate_queries(vector_store: Chroma, queries: list[str]) -> list[dict]:
 
     for query in queries:
         for method in methods:
-            result = run_rag_pipeline(vector_store, query, method=method)
+            result = run_rag_pipeline(query, vector_store, method=method)
             results.append(result)
 
     return results
