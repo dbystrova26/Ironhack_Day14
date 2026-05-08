@@ -68,3 +68,10 @@ Import conventions for all future code in this repo:
 - Chroma comes from langchain_community.vectorstores
 - PyPDFLoader comes from langchain_community.document_loaders
 
+
+Test conventions:
+- Test each function in isolation before running main()
+- Use only 3 pages and 10 chunks for embedding tests to minimise API cost
+- Always activate langchain-lab conda environment before running
+- Never run main() until all individual function tests pass
+

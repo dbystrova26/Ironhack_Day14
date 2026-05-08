@@ -61,31 +61,32 @@ def download_pdf(url: str, output_path: str) -> str:
 
 
 def download_documents() -> dict[str, str]:
-    """Download all lab source documents.
+    """Collect all local lab source documents.
 
     Inputs:
         None.
     Outputs:
-        A dictionary mapping source names to local PDF file paths.
+        A dictionary mapping source names to local document file paths.
     What it does:
-        Downloads the EU AI Act PDF and the Anthropic Claude 3 Model Card PDF.
+        Validates that the local Trustworthy AI audio and PDF files exist.
     """
     documents = {
-        "eu_ai_act": {
-            "url": "https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=OJ:L_202401689",
-            "path": "eu_ai_act.pdf",
+        "trustworthy_ai_blueprint_audio": {
+            "path": "The_Blueprint_For_Trustworthy_AI.m4a",
         },
-        "anthropic": {
-            "url": "https://www-cdn.anthropic.com/de8ba9b01c9ab7cbabf5c33b80b7bbc618857627/Model_Card_Claude_3.pdf",
-            "path": "anthropic_model_card.pdf",
+        "trustworthy_ai_guidelines": {
+            "path": "ethics_guidelines_for_trustworthy_ai-fr_87FE7A3C-D03D-9305-81A653DDA84B5A60_60427.pdf",
         },
     }
 
-    pdf_paths = {}
+    document_paths = {}
     for source, details in documents.items():
-        pdf_paths[source] = download_pdf(details["url"], details["path"])
+        path = details["path"]
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Local document is missing: {path}")
+        document_paths[source] = path
 
-    return pdf_paths
+    return document_paths
 
 
 def load_pdf_pages(pdf_path: str, source: str, topic: str) -> list[Document]:
@@ -469,12 +470,15 @@ def main() -> None:
     load_environment()
     pdf_paths = download_documents()
     topics = {
-        "eu_ai_act": "ai_regulation",
-        "anthropic": "ai_safety",
+        "trustworthy_ai_blueprint_audio": "trustworthy_ai",
+        "trustworthy_ai_guidelines": "trustworthy_ai",
     }
 
     all_pages = []
     for source, path in pdf_paths.items():
+        if not path.lower().endswith(".pdf"):
+            print(f"Skipping non-PDF document for PDF loading: {path}")
+            continue
         pages = load_pdf_pages(path, source=source, topic=topics[source])
         all_pages.extend(pages)
 
